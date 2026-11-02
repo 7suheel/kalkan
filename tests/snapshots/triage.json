@@ -1,0 +1,121 @@
+{
+  "report_id": "fake-report",
+  "verdict": "needs_evidence",
+  "confidence": 0.5,
+  "summary": "Suggested verdict: needs_evidence. parse_header exists at src/parser.c:10.",
+  "claim_checks": [
+    {
+      "claim": {
+        "kind": "file_path",
+        "value": "src/parser.c",
+        "quote": "src/parser.c",
+        "span": {
+          "start": 0,
+          "end": 12
+        }
+      },
+      "status": "confirmed",
+      "evidence": "exists",
+      "locations": [
+        "src/parser.c"
+      ]
+    },
+    {
+      "claim": {
+        "kind": "function",
+        "value": "parse_header",
+        "quote": "parse_header",
+        "span": {
+          "start": 0,
+          "end": 12
+        }
+      },
+      "status": "confirmed",
+      "evidence": "defined at src/parser.c:10",
+      "locations": [
+        "src/parser.c:10"
+      ]
+    },
+    {
+      "claim": {
+        "kind": "line_ref",
+        "value": "src/parser.c:9999",
+        "quote": "src/parser.c:9999",
+        "span": {
+          "start": 0,
+          "end": 17
+        }
+      },
+      "status": "contradicted",
+      "evidence": "line 9999 is past the end of the file (33 lines at HEAD)",
+      "locations": []
+    },
+    {
+      "claim": {
+        "kind": "function",
+        "value": "parse_header_strict",
+        "quote": "parse_header_strict",
+        "span": {
+          "start": 0,
+          "end": 19
+        }
+      },
+      "status": "not_found",
+      "evidence": "name does not appear anywhere in the repository",
+      "locations": []
+    },
+    {
+      "claim": {
+        "kind": "code_snippet",
+        "value": "x | y <img src=x>",
+        "quote": "x | y <img src=x>",
+        "span": {
+          "start": 0,
+          "end": 17
+        }
+      },
+      "status": "not_checkable",
+      "evidence": "looks like a command | not code",
+      "locations": []
+    }
+  ],
+  "quality": {
+    "has_affected_version": false,
+    "has_repro_steps": false,
+    "has_poc": false,
+    "has_impact": true,
+    "injection_suspected": false,
+    "notes": [
+      "no proof of concept"
+    ]
+  },
+  "opinions": [
+    {
+      "agent": "analyst",
+      "verdict": "needs_evidence",
+      "confidence": 0.6,
+      "reasoning": "parse_header copies into a 64-byte buffer (src/parser.c:14), but line 9999 does not exist.",
+      "missing_evidence": [
+        "the header length that triggers the overflow"
+      ],
+      "cited_locations": [
+        "src/parser.c:14"
+      ]
+    },
+    {
+      "agent": "skeptic",
+      "verdict": "needs_evidence",
+      "confidence": 0.5,
+      "reasoning": "Plausible, but no PoC.",
+      "missing_evidence": [
+        "a proof of concept"
+      ],
+      "cited_locations": []
+    }
+  ],
+  "reply_draft": "Hello,\n\nThank you for the report.\n\nBest regards,\n[maintainer name]",
+  "model": "fake:fake-model",
+  "tokens_used": 1234,
+  "cost_usd_estimate": null,
+  "kalkan_version": "0.0.0-test"
+}
