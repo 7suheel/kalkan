@@ -49,6 +49,17 @@ def test_manifest_round_trip(tmp_path: Path) -> None:
     assert read_manifest(path) == sorted(rows, key=lambda r: (r.label, r.id))
 
 
+def test_unexpected_ids_are_rejected() -> None:
+    import pytest
+
+    from eval.common import report_file
+
+    rows = parse_vuln_json([{"id": "CURL-x", "aliases": ["CVE-../../etc/x"], "summary": ""}])
+    assert rows == []
+    with pytest.raises(ValueError):
+        report_file(Path("/tmp"), "../x")
+
+
 def test_cve_report_text() -> None:
     record = json.loads((EVAL_FIXTURES / "vuln.json").read_text())[0]
     text = cve_report(record)
@@ -93,12 +104,13 @@ def test_fetch_all(tmp_path: Path) -> None:
 
 
 def test_select_rows_balances(tmp_path: Path) -> None:
-    rows = [ManifestRow(f"i{n}", "u", "invalid", "", "s") for n in range(5)]
-    rows += [ManifestRow(f"v{n}", "u", "valid", "", "s") for n in range(5)]
-    for r in rows:
+    rows = [ManifestRow(f"h1-{n}", "u", "invalid", "", "s") for n in range(5)]
+    rows += [ManifestRow(f"CVE-2020-000{n}", "u", "valid", "", "s") for n in range(5)]
+    rows.append(ManifestRow("../../evil", "u", "valid", "", "s"))
+    for r in rows[:-1]:
         (tmp_path / f"{r.id}.md").write_text("x")
     picked = select_rows(rows, tmp_path, 4)
-    assert [r.id for r in picked] == ["i0", "v0", "i1", "v1"]
+    assert [r.id for r in picked] == ["h1-0", "CVE-2020-0000", "h1-1", "CVE-2020-0001"]
     assert len(select_rows(rows, tmp_path, 0)) == 10
 
 
@@ -132,17 +144,17 @@ def test_run_checks_out_the_right_commit(tiny_repo: Path, tmp_path: Path) -> Non
     ).stdout.strip()
     data = tmp_path / "data"
     data.mkdir()
-    (data / "CVE-1.md").write_text(
+    (data / "CVE-2020-1111.md").write_text(
         "# Overflow\n\nIn version 1.0.0, parse_header() in src/parser.c:14 uses strcpy.\n"
     )
     (data / "h1-1.md").write_text("# Bug in fake_func()\n\nfake_func() in lib/nope.c is broken.\n")
     rows = [
-        ManifestRow("CVE-1", "u", "valid", "", "s", "", f"{head}^"),
+        ManifestRow("CVE-2020-1111", "u", "valid", "", "s", "", f"{head}^"),
         ManifestRow("h1-1", "u", "invalid", "2000-01-01T00:00:00Z", "s"),
     ]
     by_mode = run(rows, repo, {"no-ai": TriageSettings()}, data)
     records = by_mode["no-ai"]
-    assert [r.id for r in records] == ["CVE-1", "h1-1"]
+    assert [r.id for r in records] == ["CVE-2020-1111", "h1-1"]
     parent = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", f"{head}^"],
         capture_output=True,

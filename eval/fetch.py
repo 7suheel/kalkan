@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from eval.common import DATA_DIR, MANIFEST, USER_AGENT, ManifestRow, read_manifest
+from eval.common import DATA_DIR, MANIFEST, USER_AGENT, ManifestRow, read_manifest, report_file
 
 MIN_INTERVAL_S = 2.0
 
@@ -74,7 +74,11 @@ def fetch_all(
     written, failures = 0, []
     last = 0.0
     for row in rows:
-        target = data_dir / f"{row.id}.md"
+        try:
+            target = report_file(data_dir, row.id)
+        except ValueError as exc:
+            failures.append(str(exc))
+            continue
         if target.exists():
             continue
         if row.label == "valid":
@@ -97,7 +101,7 @@ def fetch_all(
             failures.append(f"{row.id}: {type(exc).__name__}")
             continue
         target.write_text(text, encoding="utf-8")
-        (data_dir / f"{row.id}.meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        (report_file(data_dir, row.id, ".meta.json")).write_text(json.dumps(meta), encoding="utf-8")
         written += 1
     return written, failures
 

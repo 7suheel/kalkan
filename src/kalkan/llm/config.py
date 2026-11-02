@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -38,7 +39,7 @@ class LLMSettings:
 
     def describe(self) -> str:
         """Human-readable summary without secrets."""
-        where = f" at {self.base_url}" if self.base_url else ""
+        where = f" at {redact_url(self.base_url)}" if self.base_url else ""
         return f"{self.provider}:{self.model}{where}"
 
     def __repr__(self) -> str:
@@ -73,24 +74,53 @@ def resolve_settings(
     if not spec:
         return None
     provider, model_id = parse_model_spec(spec)
-    url = base_url or env.get("KALKAN_BASE_URL") or None
-    key = env.get("KALKAN_API_KEY") or None
 
+    # Each provider only uses its own key, so a key is never sent to another service.
+    # The generic KALKAN_BASE_URL / KALKAN_API_KEY apply to ollama and compat only.
     if provider == "anthropic":
-        key = env.get("ANTHROPIC_API_KEY") or key
+        key = env.get("ANTHROPIC_API_KEY") or None
         if not key:
             raise ConfigError("anthropic needs ANTHROPIC_API_KEY")
-        return LLMSettings(provider, model_id, url or ANTHROPIC_BASE_URL, key)
-    if provider == "openai":
-        key = env.get("OPENAI_API_KEY") or key
+        url = base_url or env.get("ANTHROPIC_BASE_URL") or ANTHROPIC_BASE_URL
+    elif provider == "openai":
+        key = env.get("OPENAI_API_KEY") or None
         if not key:
             raise ConfigError("openai needs OPENAI_API_KEY")
-        return LLMSettings(provider, model_id, url or OPENAI_BASE_URL, key)
-    if provider == "ollama":
-        return LLMSettings(provider, model_id, url or OLLAMA_BASE_URL, key)
-    if not url:
-        raise ConfigError("compat needs a base URL (KALKAN_BASE_URL or --base-url)")
+        url = base_url or env.get("OPENAI_BASE_URL") or OPENAI_BASE_URL
+    elif provider == "ollama":
+        key = env.get("KALKAN_API_KEY") or None
+        url = base_url or env.get("KALKAN_BASE_URL") or OLLAMA_BASE_URL
+    else:
+        key = env.get("KALKAN_API_KEY") or None
+        url = base_url or env.get("KALKAN_BASE_URL") or ""
+        if not url:
+            raise ConfigError("compat needs a base URL (KALKAN_BASE_URL or --base-url)")
+    _check_url(url, has_key=bool(key))
     return LLMSettings(provider, model_id, url, key)
+
+
+def _check_url(url: str, has_key: bool) -> None:
+    """Reject URLs that would leak credentials."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ConfigError(f"invalid base URL {redact_url(url)!r}; use http(s)://host/...")
+    if parts.username or parts.password:
+        raise ConfigError("put credentials in an API key variable, not in the base URL")
+    local = parts.hostname in ("localhost", "127.0.0.1", "::1") or parts.hostname.endswith(
+        ".localhost"
+    )
+    if has_key and parts.scheme == "http" and not local:
+        raise ConfigError("refusing to send an API key over plain http to a remote host")
+
+
+def redact_url(url: str) -> str:
+    """Drop any user:password part from a URL before showing it."""
+    parts = urlsplit(url)
+    if parts.username or parts.password:
+        host = parts.hostname or ""
+        port = f":{parts.port}" if parts.port else ""
+        return urlunsplit((parts.scheme, host + port, parts.path, parts.query, parts.fragment))
+    return url
 
 
 def build_provider(settings: LLMSettings, transport: httpx.BaseTransport | None = None) -> Provider:

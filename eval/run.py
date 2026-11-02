@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from eval.common import DATA_DIR, MANIFEST, RESULTS_DIR, ManifestRow, read_manifest
+from eval.common import DATA_DIR, MANIFEST, RESULTS_DIR, ManifestRow, read_manifest, report_file
 from kalkan.checks import RepoIndex
 from kalkan.ingest import ReportError
 from kalkan.llm import build_provider, resolve_settings
@@ -53,9 +53,16 @@ class Record:
     error: str = ""
 
 
+def _has_text(data_dir: Path, row_id: str) -> bool:
+    try:
+        return report_file(data_dir, row_id).exists()
+    except ValueError:
+        return False
+
+
 def select_rows(rows: list[ManifestRow], data_dir: Path, limit: int) -> list[ManifestRow]:
     """Rows with a downloaded text; with a limit, alternate invalid/valid for balance."""
-    have = [r for r in rows if (data_dir / f"{r.id}.md").exists()]
+    have = [r for r in rows if _has_text(data_dir, r.id)]
     if not limit:
         return have
     invalid = [r for r in have if r.label == "invalid"]
@@ -79,7 +86,7 @@ def report_date(row: ManifestRow, data_dir: Path) -> str:
     """Published date from the manifest, or the submission date saved by fetch.py."""
     if row.published_at:
         return row.published_at
-    meta = data_dir / f"{row.id}.meta.json"
+    meta = report_file(data_dir, row.id, ".meta.json")
     if meta.exists():
         data = json.loads(meta.read_text(encoding="utf-8"))
         return str(data.get("submitted_at") or "")
@@ -201,7 +208,7 @@ def run(
             for mode, settings in modes.items():
                 start = time.perf_counter()
                 try:
-                    outcome = triage(data_dir / f"{row.id}.md", RepoIndex(wt), settings)
+                    outcome = triage(report_file(data_dir, row.id), RepoIndex(wt), settings)
                 except ReportError as exc:
                     by_mode[mode].append(
                         Record(row.id, row.label, mode, "", 0.0, 0, 0.0, commit, str(exc))

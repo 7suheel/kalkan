@@ -269,11 +269,44 @@ def test_resolve_settings() -> None:
         resolve_settings(env={"KALKAN_MODEL": "compat:x"})
 
 
+def test_keys_never_go_to_another_service() -> None:
+    env = {
+        "KALKAN_MODEL": "anthropic:m",
+        "ANTHROPIC_API_KEY": "ant",
+        "KALKAN_BASE_URL": "https://openrouter.example/api/v1",
+        "KALKAN_API_KEY": "router",
+    }
+    s = resolve_settings(env=env)
+    assert s is not None
+    assert s.base_url == "https://api.anthropic.com"
+    assert s.api_key == "ant"
+    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
+        resolve_settings(env={"KALKAN_MODEL": "anthropic:m", "KALKAN_API_KEY": "router"})
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        ("http://remote.example/v1", "plain http"),
+        ("https://user:pw@host.example/v1", "credentials"),
+        ("ftp://host/v1", "invalid base URL"),
+    ],
+)
+def test_unsafe_base_urls(url: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        resolve_settings("compat:m", url, env={"KALKAN_API_KEY": "k"})
+
+
+def test_plain_http_is_fine_locally_or_without_key() -> None:
+    assert resolve_settings("ollama:m", "http://localhost:11434/v1", env={}) is not None
+    assert resolve_settings("compat:m", "http://remote.example/v1", env={}) is not None
+
+
 def test_flags_override_env() -> None:
     env = {"KALKAN_MODEL": "ollama:a", "KALKAN_BASE_URL": "http://env/v1", "KALKAN_API_KEY": "k"}
-    s = resolve_settings("compat:b", "http://flag/v1", env=env)
+    s = resolve_settings("compat:b", "https://flag/v1", env=env)
     assert s is not None
-    assert (s.provider, s.model, s.base_url, s.api_key) == ("compat", "b", "http://flag/v1", "k")
+    assert (s.provider, s.model, s.base_url, s.api_key) == ("compat", "b", "https://flag/v1", "k")
 
 
 def test_build_provider_types() -> None:

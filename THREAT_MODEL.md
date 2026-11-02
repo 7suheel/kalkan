@@ -38,6 +38,7 @@ SECURITY.md).
 | ReDoS (inputs built to make regexes backtrack) | All patterns are bounded; tests check each one under 100 ms on 200 KB hostile inputs. Reports are capped at 200 KB of text and 5 MB on disk. |
 | Data exfiltration through rendered Markdown (images, HTML) | Output escapes report-controlled text; model prose cannot contain raw HTML or images. |
 | Dismissive replies that drive reporters away | The writer is told never to accuse reporters of using AI; dismissive wording falls back to the template reply. |
+| Key sent to the wrong service | Each provider only reads its own key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `KALKAN_API_KEY` for ollama/compat); keys are never sent over plain `http` to a remote host; credentials in base URLs are rejected. |
 | Key leakage | Keys come from environment variables, are never printed or logged, and are redacted from error messages. HTTP client logging is silenced. |
 | Private reports in public CI | Kalkan is a local CLI. `kalkan fetch` warns, saves reports with 0600 permissions, and `reports/` is gitignored. |
 | Compromised dependency | Three runtime dependencies (Typer, Pydantic, httpx); no LLM gateway libraries; `uv.lock` checked in CI with `uv lock --check`; GitHub Actions pinned to commit SHAs; Dependabot enabled. |
@@ -54,5 +55,7 @@ SECURITY.md).
   generated code) may be reported as "referenced" or "not found".
 - Line numbers are checked at HEAD and, when the report names a tagged
   version, at that tag; other versions are not checked.
+- The evaluation harness only writes report files whose ids match
+  `CVE-YYYY-NNNN` or `h1-<number>`, so external data cannot pick file paths.
 - A malicious repository checkout is out of scope: Kalkan trusts the
   maintainer's own repository.

@@ -27,6 +27,7 @@ from eval.common import DATA_DIR, MANIFEST, USER_AGENT, ManifestRow, write_manif
 GIST_RAW_URL = "https://gist.githubusercontent.com/bagder/07f7581f6e3d78ef37dfbfc81fd1d1cd/raw"
 GIST_PAGE_URL = "https://gist.github.com/bagder/07f7581f6e3d78ef37dfbfc81fd1d1cd"
 VULN_JSON_URL = "https://curl.se/docs/vuln.json"
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}")
 _H1_LINK_RE = re.compile(r"https://hackerone\.com/reports/(\d{4,10})")
 _MD_LINK_RE = re.compile(r"\[([^\]\n]{1,300})\]\((https://hackerone\.com/reports/\d{4,10})\)")
 _HTML_LINK_RE = re.compile(
@@ -82,10 +83,11 @@ def parse_vuln_json(data: Any) -> list[ManifestRow]:
     for record in data:
         if not isinstance(record, dict):
             continue
-        aliases = [a for a in record.get("aliases") or [] if str(a).startswith("CVE-")]
-        cve = aliases[0] if aliases else str(record.get("id", "")).removeprefix("CURL-")
+        candidates = [str(a) for a in record.get("aliases") or []]
+        candidates.append(str(record.get("id", "")).removeprefix("CURL-"))
+        cve = next((c for c in candidates if _CVE_RE.fullmatch(c)), "")
         if not cve:
-            continue
+            continue  # never use an unexpected id: it becomes a file name
         extra = record.get("database_specific") or {}
         fix = _fix_commit(record)
         rows.append(

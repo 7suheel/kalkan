@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -27,6 +28,14 @@ class ManifestRow:
 
 
 FIELDNAMES = [f.name for f in fields(ManifestRow)]
+_SAFE_ID_RE = re.compile(r"(?:CVE-\d{4}-\d{4,7}|h1-\d{1,12})")
+
+
+def report_file(data_dir: Path, row_id: str, suffix: str = ".md") -> Path:
+    """Path of a report text inside ``data_dir``; rejects ids that could escape it."""
+    if not _SAFE_ID_RE.fullmatch(row_id):
+        raise ValueError(f"unexpected report id {row_id!r}")
+    return data_dir / f"{row_id}{suffix}"
 
 
 def read_manifest(path: Path = MANIFEST) -> list[ManifestRow]:

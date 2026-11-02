@@ -15,7 +15,7 @@ from kalkan import __version__
 from kalkan.checks import RepoError, RepoIndex, check_claims, compute_quality, extract_claims
 from kalkan.ingest import ReportError, load_report, sanitize
 from kalkan.llm import ConfigError, ProviderError, build_provider, resolve_settings
-from kalkan.llm.config import NO_AI_MESSAGE
+from kalkan.llm.config import NO_AI_MESSAGE, redact_url
 from kalkan.models import ClaimCheck, QualitySignals, Report, SanitizerFindings, TriageResult
 from kalkan.pipeline import TriageSettings
 from kalkan.pipeline import triage as run_triage
@@ -386,7 +386,7 @@ def doctor(model: ModelOpt = None, base_url: BaseUrlOpt = None) -> None:
     typer.echo(f"Provider: {settings.provider}")
     typer.echo(f"Model:    {settings.model}")
     if settings.base_url:
-        typer.echo(f"Endpoint: {settings.base_url}")
+        typer.echo(f"Endpoint: {redact_url(settings.base_url)}")
     typer.echo(f"API key:  {'set' if settings.api_key else 'not set'}")
     try:
         provider = build_provider(settings)
