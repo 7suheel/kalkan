@@ -23,6 +23,7 @@ from kalkan.checks import RepoIndex, check_claims, compute_quality, extract_clai
 from kalkan.context import DEFAULT_TOKEN_BUDGET, build_context
 from kalkan.ingest import load_report, sanitize
 from kalkan.llm import Budget, BudgetedProvider, Provider, ProviderError
+from kalkan.llm.base import redact
 from kalkan.models import AgentOpinion, TriageResult, Verdict
 from kalkan.verdict import combine
 
@@ -91,7 +92,7 @@ def triage(
                 skeptic = run_skeptic(provider, report, checks, quality, ctx, analyst)
             opinions.append(skeptic)
         except ProviderError as exc:
-            ai_error = f"{type(exc).__name__}: {exc}"
+            ai_error = redact(f"{type(exc).__name__}: {exc}")[:300]
             log.debug("AI stage failed: %s", ai_error)
 
     with _stage("combine"):

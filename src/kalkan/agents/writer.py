@@ -18,6 +18,7 @@ from kalkan.agents.common import (
     render_opinion,
 )
 from kalkan.llm import Provider, ProviderError, complete_json
+from kalkan.llm.base import redact
 from kalkan.models import AgentOpinion, ClaimCheck, QualitySignals, Report, Verdict
 from kalkan.report_render import missing_evidence, template_reply, template_summary
 
@@ -72,7 +73,7 @@ def write_texts(
             max_tokens=WRITER_MAX_TOKENS,
         )
     except ProviderError as exc:
-        return summary, reply, [f"writer agent failed ({exc}); used templates"]
+        return summary, reply, [f"writer agent failed ({redact(str(exc))[:200]}); used templates"]
     if answer is None:
         return summary, reply, ["writer output invalid; used templates: " + "; ".join(problems)]
     notes: list[str] = []

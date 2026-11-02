@@ -110,8 +110,8 @@ def fetch_advisories(
 
 def to_report(advisory: dict[str, Any]) -> dict[str, Any]:
     """The fields Kalkan keeps from an advisory."""
-    author = advisory.get("author") if isinstance(advisory.get("author"), dict) else {}
-    assert isinstance(author, dict)
+    raw_author = advisory.get("author")
+    author: dict[str, Any] = raw_author if isinstance(raw_author, dict) else {}
     return {
         "ghsa_id": advisory.get("ghsa_id"),
         "summary": advisory.get("summary") or "",
@@ -136,6 +136,6 @@ def save_reports(advisories: list[dict[str, Any]], out_dir: Path) -> list[Path]:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(to_report(advisory), fh, indent=2)
             fh.write("\n")
-        os.chmod(path, 0o600)  # also tighten files that already existed
+        path.chmod(0o600)  # also tighten files that already existed
         written.append(path)
     return written

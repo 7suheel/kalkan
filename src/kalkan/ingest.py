@@ -7,6 +7,8 @@ is bounded so hostile input cannot make it backtrack for long.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 import unicodedata
@@ -18,6 +20,12 @@ from kalkan.models import Report, SanitizerFindings
 
 MAX_BODY_CHARS = 200 * 1024
 """Reports longer than this are truncated (and the truncation is noted)."""
+
+MAX_FILE_BYTES = 5 * 1024 * 1024
+"""Report files larger than this are rejected without being read."""
+
+_BASE64_RE = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{24,20000}={0,2}(?![A-Za-z0-9+/=])")
+MAX_BASE64_BLOCKS = 50
 
 SUPPORTED_SUFFIXES = frozenset({".md", ".markdown", ".txt", ".json"})
 
@@ -39,21 +47,23 @@ _TAG_BLOCK = range(0xE0000, 0xE0080)
 _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p, re.IGNORECASE)
     for p in (
-        r"\b(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+|the\s+)?"
-        r"(?:previous|prior|above|earlier|preceding|your)\s+"
+        r"\b(?:ignore|disregard|forget|override)\s{1,10}(?:all\s{1,10}|any\s{1,10}|the\s{1,10})?"
+        r"(?:previous|prior|above|earlier|preceding|your)\s{1,10}"
         r"(?:instructions?|prompts?|rules|directions|guidelines|context)",
-        r"\byou\s+are\s+(?:now\s+)?(?:an?\s+)?(?:ai|llm|language\s+model|assistant|chatbot|"
-        r"security\s+triager|triage\s+(?:bot|agent|assistant))\b",
-        r"\b(?:mark|classify|label|rate|treat|flag)\s+(?:this|the|it|my)\s*(?:report|issue|"
-        r"submission|finding|vulnerability)?\s+as\s+(?:a\s+)?(?:valid|legit(?:imate)?|"
-        r"critical|confirmed|high|true\s+positive)\b",
-        r"\bsystem\s+prompt\b",
-        r"\bnew\s+instructions?\s*:",
-        r"\b(?:verdict|answer|respond|output)\s*(?:is|=|:|with)?\s*\"?likely[_ ]valid\b",
-        r"</?\s*(?:system|assistant|user|instructions?|untrusted_report|code_context)\s*>",
-        r"<\|im_(?:start|end)\|>|\[/?INST\]|<<\s*/?SYS\s*>>",
-        r"(?m)^\s*(?:system|assistant)\s*:",
-        r"\bas\s+an?\s+(?:ai|llm|language\s+model)\b[^.\n]{0,80}\b(?:must|should|will)\b",
+        r"\byou\s{1,10}are\s{1,10}(?:now\s{1,10})?(?:an?\s{1,10})?(?:ai|llm|language\s{1,10}model|assistant|chatbot|"
+        r"security\s{1,10}triager|triage\s{1,10}(?:bot|agent|assistant))\b",
+        r"\b(?:mark|classify|label|rate|treat|flag)\s{1,10}(?:this|the|it|my)\s{0,10}(?:report|issue|"
+        r"submission|finding|vulnerability)?\s{1,10}as\s{1,10}(?:a\s{1,10})?(?:valid|legit(?:imate)?|"
+        r"critical|confirmed|high|true\s{1,10}positive)\b",
+        r"\bsystem\s{1,10}prompt\b",
+        r"\bnew\s{1,10}instructions?\s{0,10}:",
+        r"\b(?:verdict|answer|respond|output)\s{0,10}(?:is|=|:|with)?\s{0,10}\"?likely[_ ]valid\b",
+        r"</?\s{0,10}(?:system|assistant|user|instructions?|untrusted_report|code_context)\s{0,10}>",
+        r"<\|im_(?:start|end)\|>|\[/?INST\]|<<\s{0,10}/?SYS\s{0,10}>>",
+        r"(?m)^[ \t>]{0,20}(?:system|assistant)[ \t]{0,10}:",
+        r"\bas\s{1,10}an?\s{1,10}(?:ai|llm|language\s{1,10}model)\b[^.\n]{0,80}\b(?:must|should|will)\b",
+        # JSON that imitates Kalkan's own output schema
+        r"\"(?:verdict|cited_locations|missing_evidence|reply_draft|confidence)\"\s{0,10}:",
     )
 )
 
@@ -85,6 +95,8 @@ def load_report(path: Path) -> Report:
     if suffix not in SUPPORTED_SUFFIXES:
         raise ReportError(f"unsupported report type {suffix!r}; use .md, .txt or .json")
     try:
+        if path.stat().st_size > MAX_FILE_BYTES:
+            raise ReportError(f"report file is larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
         raw = path.read_bytes()
     except OSError as exc:
         raise ReportError(f"cannot read report: {exc.strerror or exc}") from exc
@@ -102,6 +114,8 @@ def _report_from_json(text: str, default_id: str) -> Report:
         data: Any = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ReportError(f"invalid JSON report: {exc.msg} (line {exc.lineno})") from exc
+    except RecursionError as exc:
+        raise ReportError("invalid JSON report: nested too deeply") from exc
     if not isinstance(data, dict):
         raise ReportError("JSON report must be an object")
 
@@ -175,7 +189,11 @@ def sanitize(report: Report) -> tuple[Report, SanitizerFindings]:
     for fragment in hidden:
         notes.append(f"hidden HTML content: {_clip(fragment)!r}")
 
-    phrases = find_injection_phrases(f"{title}\n{body}\n{smuggled}")
+    decoded = decode_base64_blocks(body)
+    phrases = find_injection_phrases(f"{title}\n{body}\n{smuggled}\n" + "\n".join(decoded))
+    for text in decoded:
+        if find_injection_phrases(text):
+            notes.append(f"base64 block decodes to instructions: {_clip(text)!r}")
     if phrases:
         notes.append(
             "possible prompt injection aimed at AI triagers: " + ", ".join(repr(p) for p in phrases)
@@ -212,6 +230,26 @@ def _strip_invisible(text: str) -> tuple[str, int, str]:
         else:
             out.append(ch)
     return "".join(out), removed, "".join(smuggled)
+
+
+def decode_base64_blocks(text: str) -> list[str]:
+    """Decode base64-looking blocks that turn into mostly printable text."""
+    out: list[str] = []
+    for match in _BASE64_RE.finditer(text):
+        if len(out) >= MAX_BASE64_BLOCKS:
+            break
+        token = match.group(0)
+        if token.isalpha() or token.isdigit():
+            continue  # plain words or numbers, not base64
+        try:
+            raw = base64.b64decode(token + "=" * (-len(token) % 4), validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        decoded = raw.decode("utf-8", errors="replace")
+        printable = sum(ch.isprintable() or ch in "\n\t" for ch in decoded)
+        if decoded and printable / len(decoded) > 0.9:
+            out.append(decoded)
+    return out
 
 
 def find_injection_phrases(text: str) -> list[str]:

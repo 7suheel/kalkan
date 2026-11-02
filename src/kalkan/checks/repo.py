@@ -65,7 +65,20 @@ class RepoIndex:
         }
         try:
             proc = subprocess.run(
-                ["git", "-c", "core.quotepath=off", "-C", str(cwd), *args],
+                [
+                    "git",
+                    # Never run commands configured in the repository (fsmonitor, pagers...).
+                    "-c",
+                    "core.fsmonitor=false",
+                    "-c",
+                    "core.quotepath=off",
+                    "-c",
+                    "core.pager=cat",
+                    "--no-pager",
+                    "-C",
+                    str(cwd),
+                    *args,
+                ],
                 capture_output=True,
                 timeout=GIT_TIMEOUT_S,
                 env=env,
