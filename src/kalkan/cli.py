@@ -11,6 +11,8 @@ import typer
 from kalkan import __version__
 from kalkan.checks import RepoError, RepoIndex, check_claims, compute_quality, extract_claims
 from kalkan.ingest import ReportError, load_report, sanitize
+from kalkan.llm import ConfigError, ProviderError, build_provider, resolve_settings
+from kalkan.llm.config import NO_AI_MESSAGE
 from kalkan.models import ClaimCheck, QualitySignals, Report, SanitizerFindings, TriageResult
 
 EXIT_OK = 0
@@ -25,6 +27,18 @@ app = typer.Typer(
 )
 
 ReportArg = Annotated[Path, typer.Argument(help="Report file (.md, .txt or .json).")]
+ModelOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--model",
+        help="provider:model, e.g. ollama:qwen2.5-coder:7b or anthropic:<model-id>. "
+        "Overrides KALKAN_MODEL.",
+    ),
+]
+BaseUrlOpt = Annotated[
+    str | None,
+    typer.Option("--base-url", help="Endpoint for OpenAI-compatible providers."),
+]
 RepoOpt = Annotated[Path, typer.Option("--repo", help="Local git checkout of the project.")]
 
 
@@ -154,6 +168,34 @@ def inspect(report: ReportArg) -> None:
     typer.echo("")
     status = "SUSPECTED" if findings.injection_suspected else "not detected"
     typer.echo(f"Prompt injection: {status}")
+
+
+@app.command()
+def doctor(model: ModelOpt = None, base_url: BaseUrlOpt = None) -> None:
+    """Show the configured AI provider and check that it answers. Prints no secrets."""
+    try:
+        settings = resolve_settings(model, base_url)
+    except ConfigError as exc:
+        raise _fail(str(exc)) from exc
+    if settings is None:
+        typer.echo(NO_AI_MESSAGE)
+        return
+    typer.echo(f"Provider: {settings.provider}")
+    typer.echo(f"Model:    {settings.model}")
+    if settings.base_url:
+        typer.echo(f"Endpoint: {settings.base_url}")
+    typer.echo(f"API key:  {'set' if settings.api_key else 'not set'}")
+    try:
+        provider = build_provider(settings)
+        response = provider.complete(
+            "You are a connectivity check. Reply with one word.", "ping", max_tokens=512
+        )
+    except (ConfigError, ProviderError) as exc:
+        raise _fail(f"provider check failed: {exc}", EXIT_PROVIDER_ERROR) from exc
+    typer.echo(
+        f"OK: {response.model} answered "
+        f"({response.input_tokens} input / {response.output_tokens} output tokens)."
+    )
 
 
 @app.command()
