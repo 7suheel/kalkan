@@ -147,3 +147,35 @@ class TriageResult(_Model):
     tokens_used: int = Field(default=0, ge=0)
     cost_usd_estimate: float | None = None
     kalkan_version: str = __version__
+
+
+class ContextSection(_Model):
+    """A slice of one file that the agents are allowed to see."""
+
+    path: str
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    ref: str | None = Field(default=None, description="Tag the code was read at; None = HEAD.")
+    reason: str
+    code: str = Field(description="The raw lines start_line..end_line.")
+
+
+class CodeContext(_Model):
+    """The code context given to the AI agents. Our code chooses it, never the agents."""
+
+    ref: str | None = None
+    sections: list[ContextSection] = Field(default_factory=list)
+    logs: dict[str, list[str]] = Field(default_factory=dict)
+    omitted: list[str] = Field(default_factory=list)
+    token_estimate: int = 0
+
+    def contains(self, location: str) -> bool:
+        """True if ``path:line`` (or ``path:start-end``) lies inside an included section."""
+        path, sep, line_part = location.strip().rpartition(":")
+        if not sep:
+            return any(s.path == location.strip() for s in self.sections)
+        first = line_part.split("-", 1)[0]
+        if not first.isdigit():
+            return False
+        line = int(first)
+        return any(s.path == path and s.start_line <= line <= s.end_line for s in self.sections)

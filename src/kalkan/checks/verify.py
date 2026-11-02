@@ -193,7 +193,7 @@ _DEFINITION_TEMPLATES = (
 )
 
 
-def _definition_patterns(name: str) -> list[re.Pattern[str]]:
+def definition_patterns(name: str) -> list[re.Pattern[str]]:
     """Regexes that recognize a definition of ``name`` in common languages."""
     escaped = re.escape(name)
     return [re.compile(t.replace("NAME", escaped)) for t in _DEFINITION_TEMPLATES]
@@ -252,7 +252,7 @@ def check_function(claim: Claim, repo: RepoIndex, ref: str | None = None) -> Cla
     hits = repo.grep(name, word=True)
     if not hits and ref is not None:
         hits = repo.grep(name, word=True, ref=ref)
-    patterns = _definition_patterns(name)
+    patterns = definition_patterns(name)
     defs = [h.location for h in hits if _is_definition(h, patterns)]
     if defs:
         return ClaimCheck(
@@ -294,11 +294,12 @@ def check_line_ref(claim: Claim, repo: RepoIndex, ref: str | None = None) -> Cla
     line = int(num_part)
     head = repo.resolve_file(path_part)
     at_ref = repo.resolve_file(path_part, ref) if ref is not None else []
+    # A report that names a version means its line numbers refer to that version.
     attempts: list[tuple[str | None, str]] = []
-    if len(head) == 1:
-        attempts.append((None, head[0]))
     if len(at_ref) == 1:
         attempts.append((ref, at_ref[0]))
+    if len(head) == 1:
+        attempts.append((None, head[0]))
     if not attempts:
         if len(head) > 1:
             return ClaimCheck(

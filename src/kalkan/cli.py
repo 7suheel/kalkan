@@ -150,6 +150,28 @@ def check(report: ReportArg, repo: RepoOpt = Path()) -> None:
 
 
 @app.command()
+def context(
+    report: ReportArg,
+    repo: RepoOpt = Path(),
+    token_budget: Annotated[
+        int, typer.Option("--token-budget", min=500, help="Approximate token budget.")
+    ] = 12_000,
+) -> None:
+    """Debug: print the code context the AI agents would see for this report."""
+    from kalkan.context import build_context, render_context
+
+    loaded, _ = _read(report)
+    index = _open_repo(repo)
+    try:
+        checks = check_claims(extract_claims(loaded), index)
+        ctx = build_context(loaded, checks, index, token_budget=token_budget)
+    except RepoError as exc:
+        raise _fail(str(exc)) from exc
+    typer.echo(render_context(ctx))
+    typer.echo(f"\n(~{ctx.token_estimate} tokens of {token_budget})")
+
+
+@app.command()
 def inspect(report: ReportArg) -> None:
     """Show sanitization notes and detected injection phrases for a report."""
     loaded, findings = _read(report)
