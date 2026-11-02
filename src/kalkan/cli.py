@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -14,6 +17,9 @@ from kalkan.ingest import ReportError, load_report, sanitize
 from kalkan.llm import ConfigError, ProviderError, build_provider, resolve_settings
 from kalkan.llm.config import NO_AI_MESSAGE
 from kalkan.models import ClaimCheck, QualitySignals, Report, SanitizerFindings, TriageResult
+from kalkan.pipeline import TriageSettings
+from kalkan.pipeline import triage as run_triage
+from kalkan.report_render import render_json, render_markdown
 
 EXIT_OK = 0
 EXIT_BAD_INPUT = 2
@@ -127,13 +133,158 @@ def main(
     """Kalkan compares a security report with your code and drafts a verdict and a reply."""
 
 
+class OutputFormat(StrEnum):
+    """Output formats for triage results."""
+
+    md = "md"
+    json = "json"
+
+
+REPORT_SUFFIXES = (".md", ".markdown", ".txt", ".json")
+
+
+def _setup_ai(
+    model: str | None, base_url: str | None, no_ai: bool, max_tokens: int | None
+) -> TriageSettings:
+    """Resolve AI settings and announce on stderr who will see the report."""
+    if no_ai:
+        typer.echo("AI off (--no-ai): only deterministic checks will run.", err=True)
+        return TriageSettings(max_tokens=max_tokens)
+    try:
+        llm = resolve_settings(model, base_url)
+        if llm is None:
+            typer.echo(NO_AI_MESSAGE, err=True)
+            return TriageSettings(max_tokens=max_tokens)
+        provider = build_provider(llm)
+    except ConfigError as exc:
+        raise _fail(str(exc)) from exc
+    typer.echo(f"AI on: the report will be sent to {llm.describe()}.", err=True)
+    return TriageSettings(provider=provider, model_label=llm.describe(), max_tokens=max_tokens)
+
+
+def _render(result: TriageResult, fmt: OutputFormat) -> str:
+    return render_json(result) if fmt is OutputFormat.json else render_markdown(result)
+
+
+def write_private(path: Path, text: str) -> None:
+    """Write a file readable only by the current user (reports may be private)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def _configure_logging(verbose: bool) -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    # Never log HTTP traffic: request logs could include headers or report text.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+NoAiOpt = Annotated[bool, typer.Option("--no-ai", help="Run deterministic checks only.")]
+FormatOpt = Annotated[OutputFormat, typer.Option("--format", help="Output format.")]
+MaxTokensOpt = Annotated[
+    int | None,
+    typer.Option("--max-tokens", min=1000, help="Token budget per report (default 60000)."),
+]
+VerboseOpt = Annotated[bool, typer.Option("--verbose", "-v", help="Log stage timings.")]
+
+
 @app.command()
 def triage(
     report: ReportArg,
-    repo: Annotated[Path, typer.Option("--repo", help="Local checkout of the project.")] = Path(),
+    repo: RepoOpt = Path(),
+    model: ModelOpt = None,
+    base_url: BaseUrlOpt = None,
+    no_ai: NoAiOpt = False,
+    fmt: FormatOpt = OutputFormat.md,
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Write to this file instead of stdout.")
+    ] = None,
+    max_tokens: MaxTokensOpt = None,
+    verbose: VerboseOpt = False,
 ) -> None:
-    """Triage a security report against a local repository."""
-    typer.echo("not implemented yet")
+    """Triage a security report against a local repository.
+
+    Exit codes: 0 done, 2 bad input, 3 provider error (partial output is still written).
+    """
+    _configure_logging(verbose)
+    settings = _setup_ai(model, base_url, no_ai, max_tokens)
+    try:
+        outcome = run_triage(report, repo, settings)
+    except (ReportError, RepoError) as exc:
+        raise _fail(str(exc)) from exc
+    text = _render(outcome.result, fmt)
+    if out is None:
+        typer.echo(text, nl=False)
+    else:
+        write_private(out, text)
+        typer.echo(f"Wrote {out}", err=True)
+    for note in outcome.notes:
+        typer.echo(f"note: {note}", err=True)
+    if outcome.ai_error:
+        raise _fail(f"AI stage failed: {outcome.ai_error}", EXIT_PROVIDER_ERROR)
+
+
+@app.command("triage-dir")
+def triage_dir(
+    folder: Annotated[Path, typer.Argument(help="Folder with report files.")],
+    repo: RepoOpt = Path(),
+    model: ModelOpt = None,
+    base_url: BaseUrlOpt = None,
+    no_ai: NoAiOpt = False,
+    fmt: FormatOpt = OutputFormat.md,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Output folder (default: <folder>/kalkan-results)."),
+    ] = None,
+    max_tokens: MaxTokensOpt = None,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Triage every report in a folder; write one result per report and an index.md."""
+    _configure_logging(verbose)
+    if not folder.is_dir():
+        raise _fail(f"not a folder: {folder}")
+    out_dir = out or folder / "kalkan-results"
+    reports = sorted(
+        p
+        for p in folder.iterdir()
+        if p.is_file() and p.suffix.lower() in REPORT_SUFFIXES and p.name != "index.md"
+    )
+    if not reports:
+        raise _fail(f"no .md, .txt or .json reports in {folder}")
+    settings = _setup_ai(model, base_url, no_ai, max_tokens)
+    index = _open_repo(repo)
+    rows = ["| Report | Verdict | Confidence | Result |", "| --- | --- | --- | --- |"]
+    exit_code = EXIT_OK
+    for path in reports:
+        try:
+            outcome = run_triage(path, index, settings)
+        except ReportError as exc:
+            rows.append(f"| {path.name} | error | - | {exc} |")
+            exit_code = max(exit_code, EXIT_BAD_INPUT)
+            continue
+        except RepoError as exc:
+            raise _fail(str(exc)) from exc
+        result = outcome.result
+        target = out_dir / f"{path.stem}.{fmt.value}"
+        write_private(target, _render(result, fmt))
+        rows.append(
+            f"| {path.name} | {result.verdict.value} | {result.confidence:.0%} "
+            f"| [{target.name}]({target.name}) |"
+        )
+        if outcome.ai_error:
+            exit_code = EXIT_PROVIDER_ERROR
+            typer.echo(f"{path.name}: AI stage failed: {outcome.ai_error}", err=True)
+        typer.echo(f"{path.name}: {result.verdict.value}", err=True)
+    index_text = "# Kalkan triage results\n\n" + "\n".join(rows) + "\n"
+    write_private(out_dir / "index.md", index_text)
+    typer.echo(f"Wrote {len(reports)} result(s) and index.md to {out_dir}", err=True)
+    if exit_code:
+        raise typer.Exit(exit_code)
 
 
 @app.command()

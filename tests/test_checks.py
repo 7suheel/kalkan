@@ -293,3 +293,12 @@ def test_check_command(tiny_repo: Path, reports_dir: Path) -> None:
 def test_check_command_bad_repo(tmp_path: Path, reports_dir: Path) -> None:
     result = runner.invoke(app, ["check", str(reports_dir / "clean.md"), "--repo", str(tmp_path)])
     assert result.exit_code == 2
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["which allows remote code execution", "this is a DoS", "leads to arbitrary code running"],
+)
+def test_impact_phrases(text: str) -> None:
+    kinds = {c.kind for c in extract_claims(_report(text))}
+    assert ClaimKind.IMPACT_STATEMENT in kinds

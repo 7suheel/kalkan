@@ -68,7 +68,8 @@ def _short(check: ClaimCheck) -> str:
         value = f"{value}()"
     elif check.claim.kind is ClaimKind.LINE_REF:
         value = f"line {value}"
-    where = f" ({check.locations[0]})" if check.locations else ""
+    loc = check.locations[0] if check.locations else ""
+    where = f" ({loc})" if loc and loc != check.claim.value else ""
     return f"{value[:80]}{where}"
 
 

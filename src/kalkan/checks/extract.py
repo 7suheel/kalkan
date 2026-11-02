@@ -153,6 +153,8 @@ _IMPACT_RE = re.compile(
     r"(?:can|could|may|might|is\s{1,3}able\s{1,3}to)\b"
     r"|\ballows?\s{1,3}(?:an?\s{1,3})?(?:remote\s|local\s|unauthenticated\s)?attackers?\s{1,3}to\b"
     r"|\b(?:leads?|leading|could\s{1,3}lead|may\s{1,3}lead)\s{1,3}to\b"
+    r"|\b(?:remote\s{1,3}code\s{1,3}execution|arbitrary\s{1,3}code|denial[\s-]{1,3}of[\s-]{1,3}service|"
+    r"privilege\s{1,3}escalation|information\s{1,3}disclosure|RCE|DoS)\b"
 )
 _FENCE_RE = re.compile(r" {0,3}(`{3,}|~{3,}) {0,3}([\w+#.\-]{0,30})")
 _LIST_ITEM_RE = re.compile(r"\s{0,12}(?:[-*+]|\d{1,3}[.)])\s")
