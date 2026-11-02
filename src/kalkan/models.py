@@ -36,6 +36,22 @@ class Report(_Model):
     sanitization_notes: list[str] = Field(default_factory=list)
 
 
+class SanitizerFindings(_Model):
+    """What the sanitizer noticed in a report. The original text is kept."""
+
+    removed_invisible: int = Field(default=0, ge=0, description="Invisible characters removed.")
+    smuggled_text: str = Field(default="", description="Text hidden in Unicode tag characters.")
+    hidden_html: list[str] = Field(default_factory=list, description="Hidden HTML fragments.")
+    injection_phrases: list[str] = Field(
+        default_factory=list, description="Phrases that look aimed at an AI triager."
+    )
+
+    @property
+    def injection_suspected(self) -> bool:
+        """True when the report seems to try to steer an AI reader."""
+        return bool(self.injection_phrases or self.smuggled_text)
+
+
 class ClaimKind(StrEnum):
     """Kinds of factual claims Kalkan can extract from a report."""
 
