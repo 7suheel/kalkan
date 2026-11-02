@@ -1,0 +1,7 @@
+Hello,
+
+I found a critical security vulnerability in your project. It allows attackers
+to take over the server. Please fix it as soon as possible and assign a CVE.
+I can share details after a bounty is confirmed.
+
+Thanks

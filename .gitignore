@@ -22,4 +22,4 @@ htmlcov/
 eval/data/
 
 # Private reports fetched from GitHub: never commit
-reports/
+/reports/

@@ -1,0 +1,4 @@
+{
+  "title": "Command injection in run_hook()",
+  "body": "The run_hook() function in src/hooks.c passes user input to system()."
+}

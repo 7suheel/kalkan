@@ -1,0 +1,8 @@
+{
+  "ghsa_id": "GHSA-abcd-1234-wxyz",
+  "summary": "Out-of-bounds read in parse_header()",
+  "description": "The function parse_header() in src/parser.c reads past the end of the buffer at line 20 when the header has no colon.\r\n\r\n## Steps to reproduce\r\n1. Send a header line without a colon.\r\n",
+  "severity": "high",
+  "state": "triage",
+  "created_at": "2026-10-01T12:00:00Z"
+}
