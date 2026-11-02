@@ -344,6 +344,36 @@ def inspect(report: ReportArg) -> None:
 
 
 @app.command()
+def fetch(
+    repo: Annotated[str, typer.Option("--repo", help="GitHub repository as owner/name.")],
+    out: Annotated[Path, typer.Option("--out", help="Folder for the reports.")] = Path("reports"),
+    state: Annotated[
+        str, typer.Option("--state", help="Advisory state: triage, draft, published or closed.")
+    ] = "triage",
+) -> None:
+    """Download private vulnerability reports from GitHub to triage them locally."""
+    from kalkan.github import (
+        PRIVACY_WARNING,
+        GitHubError,
+        fetch_advisories,
+        get_token,
+        save_reports,
+    )
+
+    if state not in ("triage", "draft", "published", "closed"):
+        raise _fail(f"invalid state {state!r}")
+    typer.echo(PRIVACY_WARNING, err=True)
+    try:
+        advisories = fetch_advisories(repo, get_token(), state)
+    except GitHubError as exc:
+        raise _fail(str(exc), EXIT_PROVIDER_ERROR) from exc
+    written = save_reports(advisories, out)
+    typer.echo(f"Saved {len(written)} report(s) to {out}/")
+    if written:
+        typer.echo(f"Next: kalkan triage-dir {out} --repo .")
+
+
+@app.command()
 def doctor(model: ModelOpt = None, base_url: BaseUrlOpt = None) -> None:
     """Show the configured AI provider and check that it answers. Prints no secrets."""
     try:

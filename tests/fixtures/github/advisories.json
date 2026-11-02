@@ -1,0 +1,29 @@
+[
+  {
+    "ghsa_id": "GHSA-cfgh-2345-wxqr",
+    "cve_id": null,
+    "url": "https://api.github.com/repos/octo/tinyhttp/security-advisories/GHSA-cfgh-2345-wxqr",
+    "html_url": "https://github.com/octo/tinyhttp/security/advisories/GHSA-cfgh-2345-wxqr",
+    "summary": "Heap overflow in parse_header()",
+    "description": "The function parse_header() in src/parser.c copies the name with strcpy (src/parser.c:14).\n\n## Steps to reproduce\n1. Send a 200-byte header name.",
+    "severity": "high",
+    "author": {"login": "reporter1", "id": 1, "type": "User"},
+    "publisher": null,
+    "identifiers": [{"value": "GHSA-cfgh-2345-wxqr", "type": "GHSA"}],
+    "state": "triage",
+    "created_at": "2026-10-01T12:00:00Z",
+    "updated_at": "2026-10-01T12:00:00Z",
+    "published_at": null,
+    "closed_at": null,
+    "withdrawn_at": null,
+    "submission": {"accepted": false},
+    "vulnerabilities": [],
+    "cvss": {"vector_string": null, "score": null},
+    "cwes": [],
+    "credits": [],
+    "credits_detailed": [],
+    "collaborating_users": null,
+    "collaborating_teams": null,
+    "private_fork": null
+  }
+]
