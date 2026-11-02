@@ -46,3 +46,13 @@ def triage(
 ) -> None:
     """Triage a security report against a local repository."""
     typer.echo("not implemented yet")
+
+
+@app.command()
+def schema() -> None:
+    """Print the JSON Schema of TriageResult."""
+    import json
+
+    from kalkan.models import TriageResult
+
+    typer.echo(json.dumps(TriageResult.model_json_schema(), indent=2))
