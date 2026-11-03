@@ -52,7 +52,7 @@ packages = ["src/kalkan"]
 "prompts" = "kalkan/prompts"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/kalkan", "prompts", "tests", "README.md", "LICENSE", "CLAUDE.md"]
+include = ["/src/kalkan", "/prompts", "/tests", "/README.md", "/LICENSE", "/CLAUDE.md"]
 
 [tool.ruff]
 line-length = 100

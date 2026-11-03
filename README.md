@@ -4,7 +4,7 @@
 a vulnerability report against your code and drafts a polite reply. Bring your
 own AI, or none.
 
-![Kalkan checking a made-up report against curl in --no-ai mode](docs/demo.gif)
+![Kalkan checking a made-up report against curl in --no-ai mode](https://raw.githubusercontent.com/7suheel/kalkan/main/docs/demo.gif)
 
 **Status: early development (v0.1).** Kalkan only suggests. It never closes,
 sends or publishes anything; you make the final call.
