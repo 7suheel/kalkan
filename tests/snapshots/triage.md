@@ -4,7 +4,7 @@
 
 ## Summary
 
-Suggested verdict: needs_evidence. parse_header exists at src/parser.c:10.
+> Suggested verdict: needs_evidence. parse_header exists at src/parser.c:10.
 
 ## Claim checks
 
@@ -27,13 +27,13 @@ Suggested verdict: needs_evidence. parse_header exists at src/parser.c:10.
 
 ### Analyst: needs_evidence (60%)
 
-parse_header copies into a 64-byte buffer (src/parser.c:14), but line 9999 does not exist.
+> parse_header copies into a 64-byte buffer (src/parser.c:14), but line 9999 does not exist.
 
 Cited: `src/parser.c:14`
 
 ### Skeptic: needs_evidence (50%)
 
-Plausible, but no PoC.
+> Plausible, but no PoC.
 
 ## Missing evidence
 

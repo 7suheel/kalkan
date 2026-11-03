@@ -5,6 +5,8 @@ Used in --no-ai mode and as the fallback whenever the writer agent fails.
 
 from __future__ import annotations
 
+import re
+
 from kalkan.models import (
     AgentOpinion,
     CheckStatus,
@@ -148,9 +150,21 @@ def template_reply(
     return "\n".join(lines)
 
 
-def _cell(text: str, limit: int = 120) -> str:
-    """Make text safe for a Markdown table cell (no pipes, newlines, HTML or links)."""
-    text = " ".join(text.split())
+_URL_RE = re.compile(r"(?i)\b(?:(?:https?|ftp|file|javascript|data):|www\.)[^\s`<>]{1,500}")
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def _defang(text: str) -> str:
+    """Show URLs as code so they are never clickable links in rendered Markdown."""
+    return _URL_RE.sub(lambda m: "`" + m.group(0).replace("`", "'") + "`", text)
+
+
+def md_cell(text: str, limit: int = 120) -> str:
+    """Make untrusted text safe for a Markdown table cell or list item.
+
+    No pipes, newlines, HTML, Markdown links or clickable URLs.
+    """
+    text = " ".join(_CONTROL_RE.sub("", text).split())
     if len(text) > limit:
         text = text[: limit - 3] + "..."
     for old, new in (
@@ -160,14 +174,27 @@ def _cell(text: str, limit: int = 120) -> str:
         (">", "&gt;"),
         ("[", "\\["),
         ("]", "\\]"),
+        ("`", "'"),
     ):
         text = text.replace(old, new)
-    return text
+    return _defang(text)
+
+
+_cell = md_cell
 
 
 def _prose(text: str) -> str:
-    """Neutralize raw HTML and images in model-written prose (no remote loads on render)."""
-    return text.strip().replace("<", "&lt;").replace("![", "!\\[")
+    """Render model-written or report-derived prose as a quote block.
+
+    The quote marks it as not Kalkan's own text: it cannot start headings or a
+    fake verdict line, raw HTML and images are neutralized, Markdown links are
+    broken up and URLs are shown as code.
+    """
+    lines = []
+    for line in _CONTROL_RE.sub("", text).strip().splitlines():
+        line = line.replace("<", "&lt;").replace("[", "\\[").replace("]", "\\]")
+        lines.append("> " + _defang(line) if line.strip() else ">")
+    return "\n".join(lines) if lines else "> (empty)"
 
 
 def _code_cell(text: str, limit: int = 60) -> str:
@@ -243,7 +270,7 @@ def render_markdown(result: TriageResult) -> str:
     if result.cost_usd_estimate is not None:
         footer.append(f"est. cost: ${result.cost_usd_estimate:.4f}")
     out += ["---", "", " · ".join(footer), ""]
-    return "\n".join(out)
+    return _CONTROL_RE.sub("", "\n".join(out))
 
 
 def render_json(result: TriageResult) -> str:

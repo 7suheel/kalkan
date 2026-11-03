@@ -35,6 +35,9 @@ def extract_json_object(text: str) -> Any:
         except json.JSONDecodeError:
             start = text.find("{", start + 1)
             continue
+        except RecursionError:
+            # Model output is influenced by the untrusted report; never let it crash us.
+            raise ValueError("JSON in the answer is nested too deeply") from None
         return value
     raise ValueError("no JSON object found in the answer")
 

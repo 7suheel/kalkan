@@ -23,6 +23,7 @@ from kalkan.models import AgentOpinion, ClaimCheck, QualitySignals, Report, Verd
 from kalkan.report_render import missing_evidence, template_reply, template_summary
 
 WRITER_MAX_TOKENS = 3000
+_URL_RE = re.compile(r"(?i)\b(?:(?:https?|ftp|file|javascript|data):|www\.)[^\s<>\"')\]]{1,500}")
 _RUDE_RE = re.compile(
     r"\b(?:ai[\s-]?slop|slop|spam|ai[\s-]generated|chatgpt|llm[\s-]generated|"
     r"waste\s+of\s+(?:our\s+)?time|fake\s+report)\b",
@@ -77,8 +78,17 @@ def write_texts(
     if answer is None:
         return summary, reply, ["writer output invalid; used templates: " + "; ".join(problems)]
     notes: list[str] = []
-    ai_reply = answer.reply_draft.strip()
+    ai_summary, removed_s = remove_urls(answer.summary.strip())
+    ai_reply, removed_r = remove_urls(answer.reply_draft.strip())
+    if removed_s or removed_r:
+        # Links in AI-written text can only come from the untrusted report or the model.
+        notes.append(f"removed {removed_s + removed_r} link(s) from the AI-written summary/reply")
     if _RUDE_RE.search(ai_reply):
         notes.append("writer reply used dismissive wording; replaced with the template reply")
         ai_reply = reply
-    return answer.summary.strip(), ai_reply, notes
+    return ai_summary, ai_reply, notes
+
+
+def remove_urls(text: str) -> tuple[str, int]:
+    """Replace URLs with a marker. Returns (text, number of URLs removed)."""
+    return _URL_RE.subn("[link removed]", text)

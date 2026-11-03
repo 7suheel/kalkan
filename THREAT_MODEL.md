@@ -2,7 +2,7 @@
 
 Kalkan reads hostile text by design: anyone can send a security report. This
 document lists what we protect, who might attack it, how, and what we do about
-it. Please report gaps through GitHub private vulnerability reporting (see
+it. The latest review is in [SECURITY_REVIEW.md](SECURITY_REVIEW.md). Please report gaps through GitHub private vulnerability reporting (see
 SECURITY.md).
 
 ## Assets
@@ -34,9 +34,12 @@ SECURITY.md).
 | Fake output (JSON shaped like Kalkan's own schema) | Detected as an injection marker; agent output is validated against a strict schema and citations outside the code context are dropped. |
 | Made-up claims (functions, lines, snippets that do not exist) | The deterministic checker verifies every claim against the repository without AI. |
 | Path traversal (`../../etc/passwd`, absolute paths, symlinks) | Paths are normalized, `..` is rejected, only tracked files are read, and resolved paths must stay inside the repository root. |
-| Command injection (shell metacharacters in names) | Git runs only with argument lists, never `shell=True`; values go after `-e` or `--`; refs are validated; `core.fsmonitor` and pagers are disabled. |
+| Command injection (shell metacharacters or option-like names) | Git runs only with argument lists, never `shell=True`, with a timeout; values go after `-e` or `--`; refs are validated; repository-configured programs are disabled (`core.fsmonitor`, hooks, pager, signature checks, external diff). |
+| Secrets in subprocesses | Git gets a minimal environment without API keys or `GIT_DIR`-style overrides. |
 | ReDoS (inputs built to make regexes backtrack) | All patterns are bounded; tests check each one under 100 ms on 200 KB hostile inputs. Reports are capped at 200 KB of text and 5 MB on disk. |
-| Data exfiltration through rendered Markdown (images, HTML) | Output escapes report-controlled text; model prose cannot contain raw HTML or images. |
+| Data exfiltration or spoofing through rendered Markdown (images, HTML, links, fake headings or verdict lines) | Output escapes report-controlled text; model prose is shown as a quote with links broken up and URLs as code; links are removed from AI-written summaries and replies. |
+| Terminal escape sequences | Control characters (except newline and tab) are removed from reports and from Markdown output. |
+| Crashes from hostile input (huge numbers, deep nesting, FIFOs) | Turned into input errors or NEEDS_HUMAN; property-based tests cover every extractor. |
 | Dismissive replies that drive reporters away | The writer is told never to accuse reporters of using AI; dismissive wording falls back to the template reply. |
 | Key sent to the wrong service | Each provider only reads its own key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `KALKAN_API_KEY` for ollama/compat); keys are never sent over plain `http` to a remote host; credentials in base URLs are rejected. |
 | Key leakage | Keys come from environment variables, are never printed or logged, and are redacted from error messages. HTTP client logging is silenced. |

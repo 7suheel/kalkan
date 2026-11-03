@@ -8,6 +8,7 @@ import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 import typer
 
@@ -19,7 +20,7 @@ from kalkan.llm.config import NO_AI_MESSAGE, redact_url
 from kalkan.models import ClaimCheck, QualitySignals, Report, SanitizerFindings, TriageResult
 from kalkan.pipeline import TriageSettings
 from kalkan.pipeline import triage as run_triage
-from kalkan.report_render import render_json, render_markdown
+from kalkan.report_render import md_cell, render_json, render_markdown
 
 EXIT_OK = 0
 EXIT_BAD_INPUT = 2
@@ -169,7 +170,12 @@ def _render(result: TriageResult, fmt: OutputFormat) -> str:
 def write_private(path: Path, text: str) -> None:
     """Write a file readable only by the current user (reports may be private)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # O_NOFOLLOW: never write through a symlink planted at the output path.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise _fail(f"cannot write {path}: {exc.strerror or exc}") from exc
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(text)
 
@@ -264,7 +270,7 @@ def triage_dir(
         try:
             outcome = run_triage(path, index, settings)
         except ReportError as exc:
-            rows.append(f"| {path.name} | error | - | {exc} |")
+            rows.append(f"| {md_cell(path.name)} | error | - | {md_cell(str(exc))} |")
             exit_code = max(exit_code, EXIT_BAD_INPUT)
             continue
         except RepoError as exc:
@@ -273,8 +279,8 @@ def triage_dir(
         target = out_dir / f"{path.stem}.{fmt.value}"
         write_private(target, _render(result, fmt))
         rows.append(
-            f"| {path.name} | {result.verdict.value} | {result.confidence:.0%} "
-            f"| [{target.name}]({target.name}) |"
+            f"| {md_cell(path.name)} | {result.verdict.value} | {result.confidence:.0%} "
+            f"| [{md_cell(target.name)}]({quote(target.name)}) |"
         )
         if outcome.ai_error:
             exit_code = EXIT_PROVIDER_ERROR
