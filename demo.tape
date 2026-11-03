@@ -4,11 +4,11 @@
 #   vhs demo.tape
 Output docs/demo.gif
 
-Set FontSize 16
-Set Width 1200
-Set Height 720
+Set FontSize 15
+Set Width 1400
+Set Height 760
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 40ms
+Set TypingSpeed 35ms
 
 Hide
 Type "uv sync -q && clear"
@@ -19,6 +19,9 @@ Show
 Type "cat examples/fake-report.md"
 Enter
 Sleep 2s
-Type "uv run kalkan triage examples/fake-report.md --repo ../curl --no-ai | head -40"
+Type "uv run kalkan check examples/fake-report.md --repo ../curl"
+Enter
+Sleep 3s
+Type "uv run kalkan triage examples/fake-report.md --repo ../curl --no-ai 2>/dev/null | sed -n 3p"
 Enter
 Sleep 6s

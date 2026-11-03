@@ -1,7 +1,8 @@
 # Good first issues (drafts)
 
 Eight starter tasks. Each one is small, has a clear test and touches one module.
-Create them as GitHub issues with the `good first issue` label.
+They are open as GitHub issues #4 to #11 with the `good first issue` and
+`help wanted` labels: <https://github.com/7suheel/kalkan/issues?q=label%3A%22good+first+issue%22>.
 
 ## 1. Add Swift and Kotlin function definitions to the checker
 
