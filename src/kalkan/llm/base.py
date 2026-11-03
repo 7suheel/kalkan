@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -78,6 +79,19 @@ class Provider(Protocol):
         ...
 
 
+def check_endpoint(url: str, has_key: bool) -> None:
+    """Refuse endpoints that would leak a key: plain http to a remote host, or userinfo."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ConfigError("invalid base URL; use http(s)://host/...")
+    if parts.username or parts.password:
+        raise ConfigError("put credentials in an API key variable, not in the base URL")
+    host = parts.hostname
+    local = host in ("localhost", "127.0.0.1", "::1") or host.endswith(".localhost")
+    if has_key and parts.scheme == "http" and not local:
+        raise ConfigError("refusing to send an API key over plain http to a remote host")
+
+
 def as_dict(value: object) -> dict[str, Any]:
     """Return ``value`` if it is a dict, else an empty dict (for loose JSON parsing)."""
     return value if isinstance(value, dict) else {}
@@ -126,7 +140,8 @@ def post_json(
             sleep(_retry_delay(response, attempt))
             attempt += 1
             continue
-        if response.status_code >= 400:
+        if response.status_code >= 300:
+            # Redirects are never followed: they could carry the API key to another host.
             raise ProviderHTTPError(response.status_code, _error_message(response))
         try:
             data = response.json()

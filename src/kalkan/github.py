@@ -83,7 +83,9 @@ def fetch_advisories(
         f"https://{API_HOST}/repos/{repo}/security-advisories?state={state}&per_page={PER_PAGE}"
     )
     results: list[dict[str, Any]] = []
-    with httpx.Client(transport=transport, timeout=30, headers=headers) as client:
+    with httpx.Client(
+        transport=transport, timeout=30, headers=headers, follow_redirects=False
+    ) as client:
         for _ in range(MAX_PAGES):
             if url is None:
                 break
@@ -102,7 +104,8 @@ def fetch_advisories(
                 )
             if response.status_code == 404:
                 raise GitHubError("HTTP 404: repository not found or not visible to this token")
-            if response.status_code >= 400:
+            if response.status_code >= 300:
+                # Redirects are never followed: they would carry the token elsewhere.
                 raise GitHubError(f"HTTP {response.status_code} from GitHub")
             page = response.json()
             if not isinstance(page, list):
@@ -139,7 +142,11 @@ def save_reports(advisories: list[dict[str, Any]], out_dir: Path) -> list[Path]:
         if not _GHSA_RE.fullmatch(ghsa):
             continue
         path = out_dir / f"{ghsa}.json"
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(path, flags, 0o600)
+        except OSError as exc:
+            raise GitHubError(f"cannot write {path.name}: {exc.strerror or exc}") from exc
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(to_report(advisory), fh, indent=2)
             fh.write("\n")

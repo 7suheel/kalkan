@@ -129,3 +129,39 @@ Real API runs:
 - File mode 600 is covered by `test_save_reports_private_and_loadable`; no
   real report exists yet to check it on. **Manual step**: submit a test
   private report from a second account, then re-run the fetch.
+
+PR: https://github.com/7suheel/kalkan/pull/2 (merged, CI green). The proxy
+also refuses branch deletion, so `phase-7-github-fetch` stays on GitHub.
+
+### Phase 8 - security review
+
+Full review in [SECURITY_REVIEW.md](../SECURITY_REVIEW.md): 22 rows.
+
+| Severity | Found | Fixed | Open |
+| --- | --- | --- | --- |
+| High | 0 | 0 | 0 |
+| Medium | 6 | 6 | 0 |
+| Low | 11 | 5 | 6 |
+| Info (checked, no issue) | 5 | - | - |
+
+What was found and fixed (each with a regression test that fails on the old
+code):
+
+- Hypothesis found two crashes on its own: control characters survived
+  sanitizing (terminal escape injection), and a JSON report with a
+  5,000-digit integer crashed the run and would abort `triage-dir`.
+- Deeply nested JSON in model output crashed the run (`RecursionError`).
+- A FIFO report path blocked forever.
+- Every git call inherited the full environment, including API keys and
+  `GIT_DIR`.
+- Model prose could put clickable links, headings or a fake verdict line into
+  the Markdown output; links could also reach the AI-written reply draft.
+- Smaller hardening: redirects are explicit errors, adapters check their own
+  endpoint, output files use `O_NOFOLLOW`, symlinks are not read at tags,
+  `index.md` names are escaped.
+
+Tools: `hypothesis` added as a dev dependency (property tests for every
+extractor with a 500 ms deadline per input); `uvx pip-audit` on the 31 locked
+packages found no known vulnerabilities. Workflows: all actions pinned by SHA,
+least-privilege permissions, no `pull_request_target`, no `github.event`
+interpolation in scripts.

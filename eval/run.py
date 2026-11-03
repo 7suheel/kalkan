@@ -77,7 +77,11 @@ def select_rows(rows: list[ManifestRow], data_dir: Path, limit: int) -> list[Man
 
 def _git(repo: Path, *args: str) -> str:
     out = subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=300, check=True
+        ["git", "-c", "core.hooksPath=/dev/null", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=True,
     )
     return out.stdout.strip()
 

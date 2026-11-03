@@ -14,6 +14,7 @@ from kalkan.llm.base import (
     ProviderError,
     ProviderRefusal,
     as_dict,
+    check_endpoint,
     post_json,
 )
 
@@ -51,7 +52,8 @@ class AnthropicProvider:
         self._api_key = api_key
         self._url = base_url.rstrip("/") + "/v1/messages"
         self._use_fallbacks = use_fallbacks and model in FALLBACK_MODELS
-        self._client = httpx.Client(transport=transport, timeout=timeout)
+        check_endpoint(base_url, has_key=bool(api_key))
+        self._client = httpx.Client(transport=transport, timeout=timeout, follow_redirects=False)
         self._sleep = sleep or time.sleep
 
     def __repr__(self) -> str:

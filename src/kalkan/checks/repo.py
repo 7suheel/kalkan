@@ -20,6 +20,40 @@ _HEX_RE = re.compile(r"[0-9a-fA-F]{7,40}")
 _SAFE_REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/+-]{0,200}")
 
 
+# Never run programs configured in the repository: fsmonitor, pagers, hooks,
+# signature verification (gpg.program) or external diff/textconv drivers.
+GIT_SAFE_CONFIG = (
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.pager=cat",
+    "-c",
+    "log.showSignature=false",
+    "-c",
+    "diff.external=",
+    "-c",
+    "core.quotepath=off",
+)
+# The only variables git gets. API keys and GIT_DIR-style overrides are not passed on.
+_ENV_PASSTHROUGH = ("PATH", "HOME", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "USERPROFILE")
+
+
+def git_env() -> dict[str, str]:
+    """A minimal environment for git subprocesses."""
+    env = {k: os.environ[k] for k in _ENV_PASSTHROUGH if k in os.environ}
+    env.update(
+        {
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_PAGER": "cat",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "LC_ALL": "C",
+        }
+    )
+    return env
+
+
 class RepoError(RuntimeError):
     """Raised when the repository is missing, invalid, or git fails badly."""
 
@@ -57,23 +91,12 @@ class RepoIndex:
 
     @staticmethod
     def _run_git(cwd: Path, args: list[str], ok_codes: tuple[int, ...] = (0,)) -> str:
-        env = {
-            **os.environ,
-            "GIT_TERMINAL_PROMPT": "0",
-            "GIT_PAGER": "cat",
-            "LC_ALL": "C",
-        }
+        env = git_env()
         try:
             proc = subprocess.run(
                 [
                     "git",
-                    # Never run commands configured in the repository (fsmonitor, pagers...).
-                    "-c",
-                    "core.fsmonitor=false",
-                    "-c",
-                    "core.quotepath=off",
-                    "-c",
-                    "core.pager=cat",
+                    *GIT_SAFE_CONFIG,
                     "--no-pager",
                     "-C",
                     str(cwd),
@@ -134,9 +157,16 @@ class RepoIndex:
         if key not in self._files:
             if ref is None:
                 out = self.git("ls-files", "-z")
+                self._files[key] = [f for f in out.split("\0") if f]
             else:
-                out = self.git("ls-tree", "-r", "-z", "--name-only", ref, "--")
-            self._files[key] = [f for f in out.split("\0") if f]
+                # Skip symlinks (120000) and submodules (160000): only regular blobs are read.
+                out = self.git("ls-tree", "-r", "-z", "--full-tree", ref, "--")
+                files = []
+                for entry in out.split("\0"):
+                    meta, tab, name = entry.partition("\t")
+                    if tab and meta.split(" ", 1)[0] in ("100644", "100755"):
+                        files.append(name)
+                self._files[key] = files
         return self._files[key]
 
     @staticmethod

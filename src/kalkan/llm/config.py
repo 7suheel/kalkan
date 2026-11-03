@@ -16,7 +16,7 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 from kalkan.llm.anthropic import ANTHROPIC_BASE_URL, AnthropicProvider
-from kalkan.llm.base import ConfigError, Provider
+from kalkan.llm.base import ConfigError, Provider, check_endpoint
 from kalkan.llm.openai_compat import OpenAICompatProvider
 
 PROVIDERS = ("anthropic", "openai", "ollama", "compat")
@@ -100,17 +100,15 @@ def resolve_settings(
 
 
 def _check_url(url: str, has_key: bool) -> None:
-    """Reject URLs that would leak credentials."""
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise ConfigError(f"invalid base URL {redact_url(url)!r}; use http(s)://host/...")
-    if parts.username or parts.password:
-        raise ConfigError("put credentials in an API key variable, not in the base URL")
-    local = parts.hostname in ("localhost", "127.0.0.1", "::1") or parts.hostname.endswith(
-        ".localhost"
-    )
-    if has_key and parts.scheme == "http" and not local:
-        raise ConfigError("refusing to send an API key over plain http to a remote host")
+    """Reject URLs that would leak credentials (keeps the URL out of the message if unsafe)."""
+    try:
+        check_endpoint(url, has_key)
+    except ConfigError as exc:
+        if "invalid base URL" in str(exc):
+            raise ConfigError(
+                f"invalid base URL {redact_url(url)!r}; use http(s)://host/..."
+            ) from None
+        raise
 
 
 def redact_url(url: str) -> str:

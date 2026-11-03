@@ -11,6 +11,7 @@ import base64
 import binascii
 import json
 import re
+import stat
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -95,9 +96,16 @@ def load_report(path: Path) -> Report:
     if suffix not in SUPPORTED_SUFFIXES:
         raise ReportError(f"unsupported report type {suffix!r}; use .md, .txt or .json")
     try:
-        if path.stat().st_size > MAX_FILE_BYTES:
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode):
+            # FIFOs and devices could block forever or never end.
+            raise ReportError("report must be a regular file")
+        if info.st_size > MAX_FILE_BYTES:
             raise ReportError(f"report file is larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
-        raw = path.read_bytes()
+        with path.open("rb") as fh:
+            raw = fh.read(MAX_FILE_BYTES + 1)
+        if len(raw) > MAX_FILE_BYTES:
+            raise ReportError(f"report file is larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
     except OSError as exc:
         raise ReportError(f"cannot read report: {exc.strerror or exc}") from exc
     text = raw.decode("utf-8", errors="replace")
@@ -116,6 +124,9 @@ def _report_from_json(text: str, default_id: str) -> Report:
         raise ReportError(f"invalid JSON report: {exc.msg} (line {exc.lineno})") from exc
     except RecursionError as exc:
         raise ReportError("invalid JSON report: nested too deeply") from exc
+    except ValueError as exc:
+        # e.g. integers longer than Python's int string-conversion limit
+        raise ReportError(f"invalid JSON report: {str(exc)[:120]}") from exc
     if not isinstance(data, dict):
         raise ReportError("JSON report must be an object")
 
@@ -181,7 +192,10 @@ def sanitize(report: Report) -> tuple[Report, SanitizerFindings]:
     removed += t_removed
     smuggled += t_smuggled
     if removed:
-        notes.append(f"removed {removed} invisible (zero-width, bidi or tag) characters")
+        notes.append(
+            f"removed {removed} invisible or control characters "
+            "(zero-width, bidi, tag or terminal control)"
+        )
     if smuggled.strip():
         notes.append(f"hidden text found in Unicode tag characters: {_clip(smuggled)!r}")
 
@@ -212,7 +226,10 @@ def sanitize(report: Report) -> tuple[Report, SanitizerFindings]:
 
 
 def _strip_invisible(text: str) -> tuple[str, int, str]:
-    """Remove invisible characters. Return (clean text, count removed, smuggled ASCII)."""
+    """Remove invisible and control characters (except newline and tab).
+
+    Returns (clean text, count removed, ASCII smuggled in Unicode tag characters).
+    """
     out: list[str] = []
     smuggled: list[str] = []
     removed = 0
@@ -226,6 +243,9 @@ def _strip_invisible(text: str) -> tuple[str, int, str]:
                 smuggled.append(chr(code - 0xE0000))
         elif unicodedata.category(ch) == "Cf":
             # Other format characters are also invisible; drop them too.
+            removed += 1
+        elif unicodedata.category(ch) == "Cc" and ch not in "\n\t":
+            # Control characters (ESC, NUL, BEL...) could drive the maintainer's terminal.
             removed += 1
         else:
             out.append(ch)
