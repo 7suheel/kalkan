@@ -165,3 +165,32 @@ extractor with a 500 ms deadline per input); `uvx pip-audit` on the 31 locked
 packages found no known vulnerabilities. Workflows: all actions pinned by SHA,
 least-privilege permissions, no `pull_request_target`, no `github.event`
 interpolation in scripts.
+
+PR: https://github.com/7suheel/kalkan/pull/3 (merged, CI green).
+
+### Phase 9 - demo GIF, code of conduct, first issues
+
+- **Demo GIF**: installed VHS (`go install github.com/charmbracelet/vhs@latest`),
+  ttyd and gifsicle (apt), and used the preinstalled Chromium. The first
+  recording ended on the bottom of the Markdown output, with the verdict and
+  claim table scrolled away, so `demo.tape` now shows `cat` of the made-up
+  report, `kalkan check` (compact claim table) and the verdict line from
+  `kalkan triage --no-ai`. `docs/demo.gif`: 189 KB (1400x760), under the
+  2 MB limit, so gifsicle was not needed. The last frame was checked by eye
+  and is readable. The image line at the top of README.md is enabled.
+- **Code of conduct**: the contact line is left as `[INSERT CONTACT METHOD]`
+  at the owner's request. **Manual step.**
+- **Issues**: the `good first issue` and `help wanted` labels already
+  existed. No issues existed before (`GET /repos/{owner}/{repo}/issues?state=all`).
+  Created the 8 issues from docs/first-issues.md, each with both labels,
+  context, file pointers and a "Done when" section:
+  - https://github.com/7suheel/kalkan/issues/4 Swift and Kotlin definitions
+  - https://github.com/7suheel/kalkan/issues/5 openrouter: provider preset
+  - https://github.com/7suheel/kalkan/issues/6 --no-ai reply template for mismatched claims
+  - https://github.com/7suheel/kalkan/issues/7 affected-version ranges
+  - https://github.com/7suheel/kalkan/issues/8 `kalkan check --quotes`
+  - https://github.com/7suheel/kalkan/issues/9 CWE ids as a claim kind
+  - https://github.com/7suheel/kalkan/issues/10 `triage-dir --fail-on`
+  - https://github.com/7suheel/kalkan/issues/11 `--reply-language`
+  Issue creation was allowed through the proxy, so
+  docs/first-issues-ready.md was not needed.
