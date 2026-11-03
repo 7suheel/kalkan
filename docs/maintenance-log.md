@@ -194,3 +194,70 @@ PR: https://github.com/7suheel/kalkan/pull/3 (merged, CI green).
   - https://github.com/7suheel/kalkan/issues/11 `--reply-language`
   Issue creation was allowed through the proxy, so
   docs/first-issues-ready.md was not needed.
+
+PR: https://github.com/7suheel/kalkan/pull/12 (merged, CI green).
+
+### Phase 10 - release prep (no tag created)
+
+- Version: `src/kalkan/__init__.py` says `0.1.0` (pyproject reads it through
+  hatch); CHANGELOG has `## [0.1.0] - unreleased` and now lists everything
+  merged in PRs #1, #2, #3 and #12.
+- `.github/workflows/release.yml` review:
+  - triggers on `v*` tags;
+  - runs `uv lock --check` and the full test suite;
+  - builds with `uv build`;
+  - publishes with `pypa/gh-action-pypi-publish` through Trusted Publishing,
+    with `id-token: write` only on the publish job and the `pypi` environment;
+  - all actions are pinned by SHA.
+
+  Added:
+  - a step that fails if the tag is not `v` + the package version
+    (reads `GITHUB_REF_NAME` from the environment);
+  - ruff, ruff format and mypy before the tests;
+  - `uvx twine==7.0.0 check --strict dist/*`.
+- `uv build` + `uvx twine check --strict dist/*`: both files PASSED.
+- Wheel contents (`unzip -l`): `kalkan/` package and the three prompt
+  templates (`kalkan/prompts/analyst.md`, `skeptic.md`, `writer.md`); no tests,
+  fixtures, eval, `runs/`, `reports/` or secrets.
+- sdist: the include patterns matched `README.md` at any depth (it picked up
+  `docs/launch/README.md` and `eval/README.md`); patterns are now anchored to
+  the project root. The sdist holds only `src/`, `prompts/`, `tests/`,
+  README, LICENSE, CLAUDE.md, pyproject and PKG-INFO.
+- README demo image now uses an absolute URL so it also renders on PyPI.
+- Smoke test in a fresh virtual environment with only the wheel installed:
+  - `kalkan --version` -> `kalkan 0.1.0`;
+  - `kalkan schema` -> TriageResult schema;
+  - `kalkan triage clean.md --repo <tiny fixture repo> --no-ai` -> exit 0,
+    `needs_human` (Markdown and JSON, 10 claims);
+  - prompt templates load from the installed package.
+
+**PyPI Trusted Publisher** (the project does not exist on PyPI yet, so add a
+*pending* publisher): pypi.org -> Account settings -> Publishing -> "Add a new
+pending publisher" -> GitHub:
+
+| Field | Value |
+| --- | --- |
+| PyPI Project Name | `kalkan` |
+| Owner | `7suheel` |
+| Repository name | `kalkan` |
+| Workflow name | `release.yml` |
+| Environment name | `pypi` |
+
+Optional but recommended: on GitHub, Settings -> Environments -> New
+environment `pypi`, add yourself as a required reviewer and limit deployment
+tags to `v*`.
+
+**Release commands** (run on your machine; nothing here creates a tag):
+
+```bash
+git checkout main && git pull --ff-only origin main
+# 1. Put the release date in CHANGELOG.md ("## [0.1.0] - YYYY-MM-DD"), merge
+#    that through a PR, then pull main again.
+git tag -a v0.1.0 -m "Kalkan 0.1.0"
+git push origin v0.1.0
+# 2. Watch Actions -> Release (approve the pypi environment if you protected it).
+# 3. Check the published package from a clean folder:
+uvx kalkan@0.1.0 --version
+# 4. Create the GitHub release from the CHANGELOG section:
+gh release create v0.1.0 --title "Kalkan 0.1.0" --notes-file <(sed -n '/^## \[0.1.0\]/,/^\[0.1.0\]:/p' CHANGELOG.md | sed '$d')
+```
