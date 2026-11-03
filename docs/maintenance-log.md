@@ -261,3 +261,29 @@ uvx kalkan@0.1.0 --version
 # 4. Create the GitHub release from the CHANGELOG section:
 gh release create v0.1.0 --title "Kalkan 0.1.0" --notes-file <(sed -n '/^## \[0.1.0\]/,/^\[0.1.0\]:/p' CHANGELOG.md | sed '$d')
 ```
+
+PR: https://github.com/7suheel/kalkan/pull/13 (merged; CI on `main` at
+`0ead9fa` green). No tag was created or pushed.
+
+### Manual steps left for the owner (as of 2026-11-03)
+
+1. Set the repository description and topics (phase 2 step 5 is not applied
+   yet; see the paths in Phase 2 above).
+2. Check Dependabot alerts, secret scanning and push protection under
+   Settings -> Advanced Security; this session cannot read them.
+3. Delete the merged branches, which the session cannot delete:
+   `phase-2-security-settings`, `phase-7-github-fetch`,
+   `phase-8-security-review`, `phase-9-demo-and-issues`,
+   `phase-10-release-prep`, `phase-10-log` (keep `claude/new-session-ngweex`).
+4. Fill in the contact method in CODE_OF_CONDUCT.md (`[INSERT CONTACT METHOD]`).
+5. Submit a test private vulnerability report from a second GitHub account,
+   then run `kalkan fetch --repo 7suheel/kalkan --out reports/` and check
+   that the file has mode 600.
+6. On a normal machine, run `kalkan fetch --repo curl/curl --state published
+   --out runs/published/` and `kalkan triage-dir runs/published --repo ../curl
+   --no-ai` (not possible from this session).
+7. Run phases 3-6 on a machine with Ollama (first real AI run, evaluation,
+   false-rejection fixes, real numbers in README and docs/launch/).
+8. Add the PyPI pending Trusted Publisher (`kalkan` / `7suheel` / `kalkan` /
+   `release.yml` / `pypi`), optionally protect the `pypi` environment, then
+   follow the release commands in Phase 10.
