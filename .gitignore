@@ -23,3 +23,6 @@ eval/data/
 
 # Private reports fetched from GitHub: never commit
 /reports/
+
+# Local scratch outputs (triage runs, eval progress): never commit
+/runs/
