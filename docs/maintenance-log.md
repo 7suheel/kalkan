@@ -75,3 +75,57 @@ PR: https://github.com/7suheel/kalkan/pull/1
 Ollama is not running and cannot be installed from this session (`ollama.com`
 is blocked), so Phase 3 and everything after it was not started, as the task's
 global rule requires.
+
+### Verification of the owner's manual steps (phases 1-2)
+
+Checked with read-only REST calls after the owner reported doing them:
+
+| Step | Result |
+| --- | --- |
+| Default branch | **Verified**: `default_branch` is `main`. |
+| Private vulnerability reporting | **Verified**: `GET .../private-vulnerability-reporting` -> `{"enabled": true}`. |
+| Dependabot alerts | **Not verifiable here**: `GET .../vulnerability-alerts` and `GET .../dependabot/alerts` both return 403 through this session. |
+| Secret scanning + push protection | **Not verifiable here**: `security_and_analysis` is not returned and `GET .../secret-scanning/alerts` is refused (403). |
+| Description | **Not applied**: `description` is `null` (the public page also shows GitHub's default text). |
+| Topics | **Not applied**: `topics` is `[]`. |
+| Delete `phase-2-security-settings` | **Not applied**: the branch still exists on GitHub. |
+
+Phases 3-6 are skipped in this session at the owner's request; the owner will
+run them on a machine with Ollama.
+
+### Phase 7 - `kalkan fetch` against the real GitHub API
+
+Docs: `GET /repos/{owner}/{repo}/security-advisories` in GitHub's OpenAPI
+description (`github/rest-api-description`), versions 2022-11-28 and
+2026-03-10.
+
+| Item | Docs | Kalkan before | Action |
+| --- | --- | --- | --- |
+| Endpoint | `GET /repos/{owner}/{repo}/security-advisories` | same | none |
+| `state` | `triage`, `draft`, `published`, `closed` | same, but only checked in the CLI | validated in `fetch_advisories()` too |
+| `per_page` | 1-100, default 30 | 100 | none |
+| Pagination | cursors `before`/`after` via the `Link` header | follows `rel="next"`, api.github.com only | none |
+| Auth | security managers/admins/advisory collaborators; classic tokens `repo` or `repository_advisories:read` | message said the same | docstring updated to match the docs |
+| API version | current: 2026-03-10 (drops the deprecated `cvss` property; use `cvss_severities`) | 2022-11-28 | moved to 2026-03-10; Kalkan never read `cvss` |
+| Response fields used | `ghsa_id`, `summary`, `description`, `severity`, `created_at`, `state`, `author.login`, `submission` | all but `submission` | saved `private_report` (true when `submission` is present) |
+
+Tests: the recorded sample now matches every required property of the
+2026-03-10 `repository-advisory` schema; new tests cover each documented
+state, an unknown state (rejected before any request), `private_report`, and
+`kalkan fetch --state nope` (exit 2).
+
+Real API runs:
+
+- `kalkan fetch --repo 7suheel/kalkan --out reports/`: works; privacy warning
+  printed; 0 reports (no private report submitted yet); `reports/` created
+  with mode 700 and git-ignored (`.gitignore:25:/reports/`). The same for
+  `--state draft|published|closed`: 0 advisories each.
+- `kalkan fetch --repo curl/curl --state published --out runs/published/`:
+  **not possible in this session**. The session's GitHub proxy only allows
+  API calls for attached repositories, and attaching `curl/curl` would need
+  push credentials to a third-party repository, so it was not requested.
+  **Manual step** (on a normal machine): run that command, then
+  `kalkan triage-dir runs/published --repo ../curl --no-ai`.
+- File mode 600 is covered by `test_save_reports_private_and_loadable`; no
+  real report exists yet to check it on. **Manual step**: submit a test
+  private report from a second account, then re-run the fetch.

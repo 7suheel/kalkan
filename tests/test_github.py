@@ -46,7 +46,43 @@ def test_pagination_and_headers() -> None:
     assert first.url.params["state"] == "triage"
     assert first.url.params["per_page"] == "100"
     assert first.headers["authorization"] == "Bearer tok"
-    assert first.headers["x-github-api-version"] == "2022-11-28"
+    assert first.headers["x-github-api-version"] == "2026-03-10"
+
+
+# Required properties of the `repository-advisory` schema in GitHub's OpenAPI
+# description for REST API version 2026-03-10 (github/rest-api-description).
+REQUIRED_2026_03_10 = {
+    "ghsa_id", "cve_id", "url", "html_url", "summary", "description", "severity", "author",
+    "publisher", "identifiers", "state", "created_at", "updated_at", "published_at",
+    "closed_at", "withdrawn_at", "submission", "vulnerabilities", "cwes", "cwe_ids",
+    "credits", "credits_detailed", "collaborating_users", "collaborating_teams",
+    "private_fork",
+}  # fmt: skip
+
+
+def test_sample_matches_current_schema() -> None:
+    assert set(SAMPLE[0]) >= REQUIRED_2026_03_10
+    assert "cvss" not in SAMPLE[0]  # removed in 2026-03-10; Kalkan never reads it
+
+
+@pytest.mark.parametrize("state", ["triage", "draft", "published", "closed"])
+def test_every_documented_state(state: str) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[])
+
+    assert fetch_advisories("octo/tinyhttp", "tok", state, httpx.MockTransport(handler)) == []
+    assert seen[0].url.params["state"] == state
+
+
+def test_unknown_state_is_rejected_before_any_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request expected")
+
+    with pytest.raises(GitHubError, match="state must be one of"):
+        fetch_advisories("octo/tinyhttp", "tok", "withdrawn", httpx.MockTransport(handler))
 
 
 def test_refuses_pagination_to_other_hosts() -> None:
@@ -101,10 +137,25 @@ def test_save_reports_private_and_loadable(tmp_path: Path) -> None:
     data = json.loads(written[0].read_text())
     assert data["reporter"] == "reporter1"
     assert data["severity"] == "high"
+    assert data["private_report"] is True  # the sample has a `submission` object
     report = load_report(written[0])
     assert report.id == "GHSA-cfgh-2345-wxqr"
     assert report.title == "Heap overflow in parse_header()"
     assert report.source == "github_advisory"
+
+
+def test_published_advisory_is_not_a_private_report(tmp_path: Path) -> None:
+    item = copy.deepcopy(SAMPLE[0])
+    item["submission"] = None
+    item["state"] = "published"
+    written = save_reports([item], tmp_path)
+    assert json.loads(written[0].read_text())["private_report"] is False
+
+
+def test_fetch_command_rejects_unknown_state(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["fetch", "--repo", "a/b", "--state", "nope"])
+    assert result.exit_code == 2
+    assert "choose one of" in result.output
 
 
 def test_fetch_command_then_triage_dir(

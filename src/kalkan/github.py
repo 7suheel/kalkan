@@ -1,11 +1,12 @@
 """Download private vulnerability reports from GitHub for local triage.
 
 Endpoint: ``GET /repos/{owner}/{repo}/security-advisories`` (REST API version
-2022-11-28) with ``state`` (triage, draft, published, closed) and
-``per_page`` (max 100); pagination follows the ``Link: rel="next"`` header.
-The token needs the fine-grained "Repository security advisories" read
-permission (classic tokens: ``repo`` or ``repository_advisories:read``), and
-the user must be an admin or security manager of the repository.
+2026-03-10, checked against GitHub's OpenAPI description) with ``state``
+(triage, draft, published, closed) and ``per_page`` (1-100, default 30);
+pagination is cursor-based and follows the ``Link: rel="next"`` header.
+Unpublished advisories are visible to security managers and administrators
+of the repository and to advisory collaborators; classic tokens need the
+``repo`` or ``repository_advisories:read`` scope for them.
 
 These reports are private. Kalkan saves them locally with 0600 permissions
 and never uploads them anywhere.
@@ -25,7 +26,9 @@ from urllib.parse import urlsplit
 import httpx
 
 API_HOST = "api.github.com"
-API_VERSION = "2022-11-28"
+API_VERSION = "2026-03-10"
+STATES = ("triage", "draft", "published", "closed")
+PER_PAGE = 100
 MAX_PAGES = 50
 _REPO_RE = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
 _GHSA_RE = re.compile(r"GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}")
@@ -68,6 +71,8 @@ def fetch_advisories(
     """List repository security advisories in ``state``, following pagination."""
     if not _REPO_RE.fullmatch(repo) or ".." in repo:
         raise GitHubError(f"repository must look like owner/name, got {repo!r}")
+    if state not in STATES:
+        raise GitHubError(f"state must be one of {', '.join(STATES)}, got {state!r}")
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -75,7 +80,7 @@ def fetch_advisories(
         "User-Agent": "kalkan",
     }
     url: str | None = (
-        f"https://{API_HOST}/repos/{repo}/security-advisories?state={state}&per_page=100"
+        f"https://{API_HOST}/repos/{repo}/security-advisories?state={state}&per_page={PER_PAGE}"
     )
     results: list[dict[str, Any]] = []
     with httpx.Client(transport=transport, timeout=30, headers=headers) as client:
@@ -120,6 +125,8 @@ def to_report(advisory: dict[str, Any]) -> dict[str, Any]:
         "created_at": advisory.get("created_at"),
         "state": advisory.get("state"),
         "reporter": author.get("login"),
+        # Present only for reports sent through private vulnerability reporting.
+        "private_report": isinstance(advisory.get("submission"), dict),
     }
 
 

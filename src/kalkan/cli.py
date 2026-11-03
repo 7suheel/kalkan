@@ -354,14 +354,15 @@ def fetch(
     """Download private vulnerability reports from GitHub to triage them locally."""
     from kalkan.github import (
         PRIVACY_WARNING,
+        STATES,
         GitHubError,
         fetch_advisories,
         get_token,
         save_reports,
     )
 
-    if state not in ("triage", "draft", "published", "closed"):
-        raise _fail(f"invalid state {state!r}")
+    if state not in STATES:
+        raise _fail(f"invalid state {state!r}; choose one of {', '.join(STATES)}")
     typer.echo(PRIVACY_WARNING, err=True)
     try:
         advisories = fetch_advisories(repo, get_token(), state)
