@@ -33,7 +33,7 @@ kalkan = "kalkan.cli:app"
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "ruff>=0.6",
+    "ruff>=0.17.6",
     "mypy>=1.11",
     "hypothesis>=6.170.14",
 ]
