@@ -34,7 +34,7 @@ kalkan = "kalkan.cli:app"
 dev = [
     "pytest>=8",
     "ruff>=0.6",
-    "mypy>=1.11",
+    "mypy>=2.4.1",
     "hypothesis>=6.170.14",
 ]
 
